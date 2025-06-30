@@ -1,0 +1,149 @@
+# ==========================================
+# helm/tiksimpro/values-production.yaml - Production overrides
+# ==========================================
+# Production configuration overrides
+# This file contains production-specific settings that override the default values
+
+# Use production image tag
+image:
+  tag: "production"
+  pullPolicy: Always
+
+# Production bot configuration with real accounts
+bots:
+  - name: bot1
+    account: "production_account_1"  # Your real production account
+    enabled: true
+    replicas: 1
+    
+    platforms:
+      tiktok:
+        enabled: true
+        schedule: "0 */6 * * *"
+        hashtags: ["fyp", "viral", "satisfying", "trending"]
+      youtube:
+        enabled: true
+        schedule: "0 10 * * *"
+        hashtags: ["shorts", "viral", "satisfying"]
+    
+    # Increased resources for production workload
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+    
+    env:
+      LOG_LEVEL: "WARNING"  # Less verbose logging in production
+      VIDEO_DURATION: "30"
+      HEADLESS_BROWSER: "true"
+
+  - name: bot2
+    account: "production_account_2"
+    enabled: true
+    replicas: 1
+    
+    platforms:
+      tiktok:
+        enabled: true
+        schedule: "30 */6 * * *"
+        hashtags: ["fyp", "trending", "viral", "physics"]
+      instagram:
+        enabled: true
+        schedule: "0 14 * * *"
+        hashtags: ["reels", "viral", "explore"]
+    
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+    
+    env:
+      LOG_LEVEL: "WARNING"
+      VIDEO_DURATION: "45"
+      HEADLESS_BROWSER: "true"
+
+# Production web interface with external access
+webInterface:
+  replicas: 3  # Higher availability
+  
+  ingress:
+    enabled: true
+    hosts:
+      - host: tiksimpro.your-production-domain.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: tiksimpro-prod-tls
+        hosts:
+          - tiksimpro.your-production-domain.com
+
+# Production database with more resources
+postgresql:
+  auth:
+    postgresPassword: "super_secure_production_password_change_me"
+  
+  primary:
+    persistence:
+      size: 100Gi  # Larger storage for production
+    
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+# Production Redis with authentication
+redis:
+  auth:
+    enabled: true
+    password: "redis_production_password"
+  
+  master:
+    persistence:
+      size: 20Gi
+    
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+# Larger storage for production
+persistence:
+  size: 200Gi
+  storageClass: "fast-ssd"  # Use faster storage class if available
+
+# Enhanced monitoring for production
+monitoring:
+  prometheus:
+    retention: "90d"  # Keep metrics longer in production
+    storage:
+      size: 50Gi
+  
+  grafana:
+    adminPassword: "secure_grafana_password_change_me"
+    persistence:
+      size: 10Gi
+
+# Enable security features in production
+networkPolicy:
+  enabled: true
+
+# Production auto-scaling with higher limits
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60  # More aggressive scaling
+  targetMemoryUtilizationPercentage: 70

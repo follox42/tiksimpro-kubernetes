@@ -1,0 +1,246 @@
+# ==========================================
+# helm/tiksimpro/values.yaml - Main configuration
+# ==========================================
+# TikSimPro Helm Chart Values
+# This file contains all configurable parameters for your TikSimPro deployment
+
+# Global settings that apply to all components
+global:
+  # Image pull policy for all containers
+  imagePullPolicy: IfNotPresent
+  # Storage class for persistent volumes (leave empty for default)
+  storageClass: ""
+
+# Docker image configuration
+image:
+  repository: tiksimpro
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: "latest"
+
+# Bot configuration - This is the heart of your TikSimPro setup
+# You can configure multiple bots, each with their own accounts and schedules
+bots:
+  # First bot configuration
+  - name: bot1
+    account: "tiksim_pro"
+    enabled: true
+    replicas: 1
+    
+    # Platform-specific configuration
+    platforms:
+      tiktok:
+        enabled: true
+        # Cron schedule: "minute hour day month day_of_week"
+        # "0 */6 * * *" means "at minute 0 of every 6th hour" (6AM, 12PM, 6PM, 12AM)
+        schedule: "0 */6 * * *"
+        description: "Post to TikTok every 6 hours"
+        hashtags: ["fyp", "viral", "satisfying", "asmr"]
+      youtube:
+        enabled: true
+        # "0 10 * * *" means "daily at 10:00 AM"
+        schedule: "0 10 * * *"
+        description: "Daily YouTube Shorts upload"
+        hashtags: ["shorts", "satisfying", "viral"]
+    
+    # Resource allocation for this bot
+    resources:
+      requests:
+        # Guaranteed resources (what Kubernetes will always provide)
+        memory: "512Mi"  # 512 megabytes of RAM
+        cpu: "250m"      # 250 millicores (0.25 CPU cores)
+      limits:
+        # Maximum resources (prevents one bot from using all cluster resources)
+        memory: "2Gi"    # 2 gigabytes of RAM maximum
+        cpu: "1000m"     # 1000 millicores (1 CPU core maximum)
+    
+    # Environment variables specific to this bot
+    env:
+      LOG_LEVEL: "INFO"
+      VIDEO_DURATION: "30"
+      HEADLESS_BROWSER: "true"
+
+  # Second bot configuration
+  - name: bot2
+    account: "pronny"
+    enabled: true
+    replicas: 1
+    
+    platforms:
+      tiktok:
+        enabled: true
+        # Offset by 30 minutes to avoid simultaneous posting
+        schedule: "30 */6 * * *"
+        description: "Post to TikTok every 6 hours (offset)"
+        hashtags: ["fyp", "trending", "viral", "physics"]
+      instagram:
+        enabled: true
+        # Daily posting at 2 PM when engagement is typically higher
+        schedule: "0 14 * * *"
+        description: "Daily Instagram Reels upload"
+        hashtags: ["reels", "satisfying", "viral", "explore"]
+    
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    
+    env:
+      LOG_LEVEL: "INFO"
+      VIDEO_DURATION: "45"
+      HEADLESS_BROWSER: "true"
+
+# Web interface configuration for monitoring your bots
+webInterface:
+  enabled: true
+  replicas: 2  # High availability with 2 replicas
+  
+  # Service configuration
+  service:
+    type: ClusterIP  # Change to LoadBalancer for external access
+    port: 80
+    targetPort: 3000
+  
+  # Ingress configuration for external access
+  ingress:
+    enabled: false  # Set to true to enable external access
+    className: "nginx"
+    annotations:
+      # Enable HTTPS with Let's Encrypt
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      # Enable gzip compression
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+    hosts:
+      - host: tiksimpro.your-domain.com  # CHANGE THIS to your domain
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: tiksimpro-tls
+        hosts:
+          - tiksimpro.your-domain.com
+
+# PostgreSQL database configuration for storing metrics and bot status
+postgresql:
+  enabled: true
+  auth:
+    # IMPORTANT: Change this password in production!
+    postgresPassword: "secure_password_change_in_production"
+    username: "tiksimpro"
+    database: "tiksimpro"
+  
+  # Primary database configuration
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi  # 20GB storage for database
+    
+    # Resource allocation for database
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    
+    # PostgreSQL configuration
+    pgHbaConfiguration: |
+      local all all trust
+      host all all localhost trust
+      host all all 127.0.0.1/32 trust
+
+# Redis cache configuration for improved performance
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false  # Simplified for development (enable in production)
+  
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi  # 8GB storage for cache
+    
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "250m"
+
+# Persistent storage configuration
+persistence:
+  enabled: true
+  # Storage class (leave empty to use default)
+  storageClass: ""
+  # Total storage size for videos and data
+  size: 50Gi
+  # Access mode for the storage
+  accessMode: ReadWriteOnce
+
+# Monitoring configuration with Prometheus and Grafana
+monitoring:
+  enabled: true
+  
+  # Prometheus for metrics collection
+  prometheus:
+    enabled: true
+    retention: "30d"  # Keep metrics for 30 days
+    storage:
+      size: 10Gi
+  
+  # Grafana for visualization dashboards
+  grafana:
+    enabled: true
+    adminPassword: "admin123"  # CHANGE THIS in production!
+    persistence:
+      enabled: true
+      size: 5Gi
+
+# Auto-scaling configuration
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  # Scale up when CPU usage exceeds 70%
+  targetCPUUtilizationPercentage: 70
+  # Scale up when memory usage exceeds 80%
+  targetMemoryUtilizationPercentage: 80
+
+# Security configuration
+podSecurityContext:
+  # Run as non-root user
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Network policies for security
+networkPolicy:
+  enabled: false  # Enable in production for network security
+  ingress:
+    enabled: true
+  egress:
+    enabled: true
+
+# Node selector and tolerations for pod placement
+nodeSelector: {}
+tolerations: []
+affinity: {}

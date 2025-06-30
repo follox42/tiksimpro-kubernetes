@@ -1,0 +1,176 @@
+# ==========================================
+# helm/tiksimpro/templates/deployment-bot.yaml - Bot deployment template
+# ==========================================
+{{- range .Values.bots }}
+{{- if .enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tiksimpro.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "tiksimpro.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: bot
+    bot.tiksimpro/name: {{ .name }}
+    bot.tiksimpro/account: {{ .account }}
+spec:
+  serviceName: {{ include "tiksimpro.fullname" $ }}-{{ .name }}
+  replicas: {{ .replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "tiksimpro.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: bot
+      bot.tiksimpro/name: {{ .name }}
+  template:
+    metadata:
+      annotations:
+        # Force pod restart when configuration changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-bot.yaml") $ | sha256sum }}
+        # Prometheus scraping annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "tiksimpro.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: bot
+        bot.tiksimpro/name: {{ .name }}
+        bot.tiksimpro/account: {{ .account }}
+    spec:
+      # Security context for the entire pod
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      
+      # Service account for Kubernetes API access if needed
+      serviceAccountName: {{ include "tiksimpro.serviceAccountName" $ }}
+      
+      containers:
+        - name: bot
+          # Security context for the container
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          
+          # Environment variables for bot configuration
+          env:
+            - name: BOT_ID
+              value: {{ .name }}
+            - name: BOT_ACCOUNT
+              value: {{ .account }}
+            - name: BOT_MODE
+              value: "production"
+            {{- if .env }}
+            {{- range $key, $value := .env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            # Database connection
+            - name: POSTGRES_HOST
+              value: {{ include "tiksimpro.fullname" $ }}-postgresql
+            - name: POSTGRES_DB
+              value: {{ $.Values.postgresql.auth.database }}
+            - name: POSTGRES_USER
+              value: {{ $.Values.postgresql.auth.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tiksimpro.fullname" $ }}-postgresql
+                  key: postgres-password
+            # Redis connection
+            - name: REDIS_HOST
+              value: {{ include "tiksimpro.fullname" $ }}-redis-master
+            {{- if $.Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tiksimpro.fullname" $ }}-redis
+                  key: redis-password
+            {{- end }}
+          
+          # Volume mounts for persistent storage
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.json
+              subPath: {{ .name }}.json
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            - name: videos
+              mountPath: /app/videos
+            - name: logs
+              mountPath: /app/logs
+          
+          # Resource limits and requests
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          
+          # Health checks for Kubernetes
+          livenessProbe:
+            exec:
+              command:
+                - /usr/local/bin/health-check.sh
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /app/data/.ready"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Startup probe for slow-starting applications
+          startupProbe:
+            exec:
+              command:
+                - /usr/local/bin/health-check.sh
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 12  # Allow up to 2 minutes to start
+      
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "tiksimpro.fullname" $ }}-bot-configs
+        - name: logs
+          emptyDir:
+            sizeLimit: 1Gi
+  
+  # Persistent volume claim templates for StatefulSet
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "tiksimpro.labels" $ | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if $.Values.persistence.storageClass }}
+        storageClassName: {{ $.Values.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $.Values.persistence.size }}
+    
+    - metadata:
+        name: videos
+        labels:
+          {{- include "tiksimpro.labels" $ | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if $.Values.persistence.storageClass }}
+        storageClassName: {{ $.Values.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $.Values.persistence.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,109 @@
+# ==========================================
+# helm/tiksimpro/templates/configmap-bot.yaml - Bot configurations
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tiksimpro.fullname" . }}-bot-configs
+  labels:
+    {{- include "tiksimpro.labels" . | nindent 4 }}
+data:
+{{- range .Values.bots }}
+{{- if .enabled }}
+  {{ .name }}.json: |
+    {
+      "trend_analyzer": {
+        "name": "SimpleTrendAnalyzer",
+        "params": {
+          "music_folder": "/app/data/music",
+          "cache_dir": "/app/data/trend_cache",
+          "region": "global",
+          "hashtags": {{ .platforms.tiktok.hashtags | default (list "satisfying" "oddlysatisfying" "fyp" "viral") | toJson }},
+          "refresh_interval": 3600,
+          "max_trends": 50
+        }
+      },
+      "video_generator": {
+        "name": "GravityFallsSimulator",
+        "params": {
+          "width": 1080,
+          "height": 1920,
+          "fps": 60,
+          "duration": {{ .env.VIDEO_DURATION | default "30" | float64 }},
+          "quality": "high",
+          "anti_aliasing": true,
+          "particle_count": 500
+        }
+      },
+      "audio_generator": {
+        "name": "CustomMidiAudioGenerator",
+        "params": {
+          "sync_with_video": true,
+          "quality": "high",
+          "dynamic_volume": true
+        }
+      },
+      "media_combiner": {
+        "name": "FFmpegMediaCombiner",
+        "params": {
+          "codec": "h264",
+          "bitrate": "3M",
+          "audio_codec": "aac",
+          "hardware_acceleration": false
+        }
+      },
+      "publishers": {
+        {{- $first := true }}
+        {{- range $platform, $config := .platforms }}
+        {{- if $config.enabled }}
+        {{- if not $first }},{{ end }}
+        "{{ $platform }}": {
+          "name": "{{ $platform | title }}Publisher",
+          "params": {
+            "auto_close": true,
+            "headless": {{ $.env.HEADLESS_BROWSER | default "true" }},
+            "retry_attempts": 3,
+            "wait_after_upload": 60,
+            "account_name": "{{ $.account }}"
+          },
+          "enabled": true,
+          "schedule": {
+            "cron": "{{ $config.schedule }}",
+            "description": "{{ $config.description }}",
+            "timezone": "UTC"
+          }
+        }
+        {{- $first = false }}
+        {{- end }}
+        {{- end }}
+      },
+      "pipeline": {
+        "name": "SimplePipeline",
+        "params": {
+          "output_dir": "/app/videos",
+          "auto_publish": true,
+          "video_duration": {{ .env.VIDEO_DURATION | default "30" | float64 }},
+          "video_dimensions": [1080, 1920],
+          "fps": 60,
+          "cleanup_after_publish": true,
+          "backup_enabled": true
+        }
+      },
+      "scheduler": {
+        "enabled": true,
+        "timezone": "UTC",
+        "max_concurrent_jobs": 1,
+        "retry_failed_jobs": true,
+        "job_timeout": 3600,
+        "health_check_interval": 300
+      },
+      "logging": {
+        "level": "{{ .env.LOG_LEVEL | default "INFO" }}",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        "file": "/app/logs/{{ .name }}.log",
+        "max_size": "100MB",
+        "backup_count": 5
+      }
+    }
+{{- end }}
+{{- end }}
