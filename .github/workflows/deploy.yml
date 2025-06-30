@@ -94,22 +94,23 @@ jobs:
           pytest tests/ --cov=src/ --cov-report=xml --cov-report=html --junitxml=pytest.xml
 
       - name: 📊 Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: |
             pytest.xml
-            htmlcov/
             coverage.xml
+          retention-days: 30
 
       - name: 📈 Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         if: ${{ !inputs.skip_tests }}
         with:
           file: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # Job 2: Build and publish Docker image
   build-image:
