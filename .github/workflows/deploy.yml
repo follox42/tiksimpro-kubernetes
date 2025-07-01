@@ -93,7 +93,7 @@ jobs:
 
       - name: 🔍 Type checking (mypy)
         run: |
-          mypy src/ --ignore-missing-imports --no-strict-optional
+          mypy src/ --ignore-missing-imports --no-strict-optional --explicit-package-bases
         continue-on-error: true # Don't fail the build on type errors yet
 
       - name: 🧪 Run unit tests
